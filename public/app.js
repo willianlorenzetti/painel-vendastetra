@@ -1,9 +1,7 @@
 /* ── State ───────────────────────────────────────────────────────────────── */
-let rankingData   = [];   // ranking por vendedor (vem do servidor)
-let sortCol       = 'meta';
-let sortDir       = 'desc';
-let activeCompany  = 'all';
-let searchText     = '';
+let rankingData = [];
+let sortCol     = 'meta';
+let sortDir     = 'desc';
 
 /* ── DOM refs ────────────────────────────────────────────────────────────── */
 const elLoading      = document.getElementById('loading');
@@ -50,7 +48,7 @@ async function loadData() {
   elAlertErrors.classList.add('hidden');
 
   try {
-    const res  = await fetch(`/api/vendas?from=${isoDate}&company=${activeCompany}`);
+    const res  = await fetch(`/api/vendas?from=${isoDate}&company=all`);
     const json = await res.json();
 
     if (!res.ok) { showError(json.error || 'Erro no servidor.'); return; }
@@ -95,11 +93,6 @@ const medalhas = ['🥇', '🥈', '🥉'];
 
 function renderRanking() {
   let rows = [...rankingData];
-
-  if (searchText) {
-    const q = searchText.toLowerCase();
-    rows = rows.filter(r => r.rep_nome.toLowerCase().includes(q));
-  }
 
   rows.sort((a, b) => {
     let va = a[sortCol] ?? 0;
@@ -170,20 +163,14 @@ function showError(msg) {
 /* ── Eventos ─────────────────────────────────────────────────────────────── */
 elRefresh.addEventListener('click', loadData);
 
-document.getElementById('tab-company').addEventListener('click', e => {
-  const btn = e.target.closest('.tab');
-  if (!btn) return;
-  document.querySelectorAll('#tab-company .tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  activeCompany = btn.dataset.value;
-  loadData();
-});
-
 let dateTimer;
 elDateInput.addEventListener('change', () => {
   clearTimeout(dateTimer);
   dateTimer = setTimeout(loadData, 500);
 });
+
+// Auto-refresh a cada 30 minutos
+setInterval(loadData, 30 * 60 * 1000);
 
 
 document.querySelectorAll('th.sortable').forEach(th => {
