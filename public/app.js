@@ -1,18 +1,16 @@
 /* ── State ───────────────────────────────────────────────────────────────── */
-let allData       = [];
-let sortCol       = 'qtde_tetra';
+let rankingData   = [];   // ranking por vendedor (vem do servidor)
+let sortCol       = 'meta';
 let sortDir       = 'desc';
-let activeCompany = 'all';
-let searchText    = '';
+let activeCompany  = 'all';
+let searchText     = '';
 
 /* ── DOM refs ────────────────────────────────────────────────────────────── */
 const elLoading      = document.getElementById('loading');
 const elEmpty        = document.getElementById('empty-state');
 const elTable        = document.getElementById('data-table');
 const elBody         = document.getElementById('table-body');
-const elCount        = document.getElementById('table-count');
 const elAlertErrors  = document.getElementById('alert-errors');
-const elSearch       = document.getElementById('search-input');
 const elRefresh      = document.getElementById('btn-refresh');
 const elDateInput    = document.getElementById('input-date');
 const elProgressFill = document.getElementById('progress-fill');
@@ -22,17 +20,17 @@ const elHeaderSync   = document.getElementById('header-sync');
 const fmtBRL = v =>
   (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const fmtQty = v =>
-  (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmtN = v =>
+  (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-/* ── Data: DD/MM/AAAA → YYYY-MM-DD ──────────────────────────────────────── */
+/* ── Data DD/MM/AAAA → YYYY-MM-DD ───────────────────────────────────────── */
 function parseDateBR(str) {
   const m = str.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
-/* ── Máscara automática no input de data ─────────────────────────────────── */
+/* ── Máscara de data ─────────────────────────────────────────────────────── */
 elDateInput.addEventListener('input', e => {
   let v = e.target.value.replace(/\D/g, '').slice(0, 8);
   if (v.length > 4) v = v.slice(0,2) + '/' + v.slice(2,4) + '/' + v.slice(4);
@@ -43,10 +41,7 @@ elDateInput.addEventListener('input', e => {
 /* ── Fetch ───────────────────────────────────────────────────────────────── */
 async function loadData() {
   const isoDate = parseDateBR(elDateInput.value);
-  if (!isoDate) {
-    showError('Data inválida. Use o formato DD/MM/AAAA (ex: 01/06/2026).');
-    return;
-  }
+  if (!isoDate) { showError('Data inválida. Use DD/MM/AAAA.'); return; }
 
   elRefresh.classList.add('loading');
   elLoading.classList.remove('hidden');
@@ -54,35 +49,30 @@ async function loadData() {
   elTable.classList.add('hidden');
   elAlertErrors.classList.add('hidden');
 
-  const url = `/api/vendas?from=${isoDate}&company=${activeCompany}`;
-
   try {
-    const res  = await fetch(url);
+    const res  = await fetch(`/api/vendas?from=${isoDate}&company=${activeCompany}`);
     const json = await res.json();
 
-    if (!res.ok) {
-      showError(json.error || 'Erro desconhecido no servidor.');
-      return;
-    }
+    if (!res.ok) { showError(json.error || 'Erro no servidor.'); return; }
 
-    if (json.erros && json.erros.length) {
-      elAlertErrors.innerHTML =
-        '<strong>Atenção:</strong>' + json.erros.map(e => `<br>• ${e}`).join('');
+    if (json.erros?.length) {
+      elAlertErrors.innerHTML = '<strong>Atenção:</strong>' + json.erros.map(e => `<br>• ${e}`).join('');
       elAlertErrors.classList.remove('hidden');
     }
 
     if (json.sincronizado_em) {
       const d = new Date(json.sincronizado_em);
       elHeaderSync.textContent =
-        `Atualizado em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}`;
+        `Atualizado em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
     }
 
-    allData = json.clientes || [];
+    rankingData = json.ranking || [];
+
     renderKPIs(json.kpis || {});
-    renderTable();
+    renderRanking();
 
   } catch (err) {
-    showError('Falha ao conectar com o servidor: ' + err.message);
+    showError('Falha ao conectar: ' + err.message);
   } finally {
     elRefresh.classList.remove('loading');
     elLoading.classList.add('hidden');
@@ -92,30 +82,28 @@ async function loadData() {
 /* ── KPIs ────────────────────────────────────────────────────────────────── */
 function renderKPIs(k) {
   setText('kpi-pct-meta',    `${k.pctMeta ?? 0}%`);
-  setText('kpi-sub-meta',    `${fmtQty(k.atingiramMeta)} de ${fmtQty(k.totalPeriodo)} clientes no período`);
-  setText('kpi-com-tetra',   fmtQty(k.comTetra));
-  setText('kpi-sub-periodo', `${fmtQty(k.totalPeriodo)} total no período`);
-  setText('kpi-total-qtde',  fmtQty(k.totalQtdeTetra));
+  setText('kpi-sub-meta',    `${fmtN(k.atingiramMeta)} de ${fmtN(k.totalPeriodo)} clientes no período`);
+  setText('kpi-com-tetra',   fmtN(k.atingiramMeta));
+  setText('kpi-sub-periodo', `de ${fmtN(k.totalPeriodo)} no período`);
+  setText('kpi-total-qtde',  fmtN(k.totalQtdeTetra));
   setText('kpi-valor-tetra', fmtBRL(k.totalValorTetra));
   elProgressFill.style.width = `${Math.min(k.pctMeta ?? 0, 100)}%`;
 }
 
-/* ── Tabela ──────────────────────────────────────────────────────────────── */
-function renderTable() {
-  let rows = [...allData];
+/* ── Render ranking ──────────────────────────────────────────────────────── */
+const medalhas = ['🥇', '🥈', '🥉'];
+
+function renderRanking() {
+  let rows = [...rankingData];
 
   if (searchText) {
     const q = searchText.toLowerCase();
-    rows = rows.filter(r =>
-      (r.cli_nome  || '').toLowerCase().includes(q) ||
-      (r.rep_nome  || '').toLowerCase().includes(q) ||
-      String(r.cli_codigo || '').toLowerCase().includes(q)
-    );
+    rows = rows.filter(r => r.rep_nome.toLowerCase().includes(q));
   }
 
   rows.sort((a, b) => {
-    let va = a[sortCol] ?? '';
-    let vb = b[sortCol] ?? '';
+    let va = a[sortCol] ?? 0;
+    let vb = b[sortCol] ?? 0;
     if (typeof va === 'string') va = va.toLowerCase();
     if (typeof vb === 'string') vb = vb.toLowerCase();
     if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -129,7 +117,6 @@ function renderTable() {
       th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
   });
 
-  elCount.textContent = `${rows.length} cliente${rows.length !== 1 ? 's' : ''}`;
 
   if (!rows.length) {
     elTable.classList.add('hidden');
@@ -140,15 +127,24 @@ function renderTable() {
   elEmpty.classList.add('hidden');
   elTable.classList.remove('hidden');
 
-  elBody.innerHTML = rows.map(r => {
-    const metaClass = r.qtde_tetra >= 10 ? 'qty-meta' : 'qty-abaixo';
+  elBody.innerHTML = rows.map((r, i) => {
+    const pos     = i + 1;
+    const badge   = pos <= 3
+      ? `<span class="rank-medal">${medalhas[i]}</span>`
+      : `<span class="rank-num">${pos}</span>`;
+    const pctBar  = `
+      <div class="rank-pct-wrap">
+        <span class="rank-pct-num ${r.pct >= 50 ? 'pct-high' : ''}">${r.pct}%</span>
+        <div class="rank-bar"><div class="rank-bar-fill" style="width:${Math.min(r.pct,100)}%"></div></div>
+      </div>`;
+
     return `
       <tr>
-        <td>${esc(r.rep_nome)}</td>
-        <td class="td-codigo">${esc(r.cli_codigo)}</td>
-        <td>${esc(r.cli_nome)}</td>
-        <td class="td-right ${metaClass}">${fmtQty(r.qtde_tetra)}</td>
-        <td class="td-right">${fmtBRL(r.valor_tetra)}</td>
+        <td class="td-rank">${badge}</td>
+        <td class="td-vendedor">${esc(r.rep_nome)}</td>
+        <td class="td-num">${fmtN(r.total)}</td>
+        <td class="td-num td-meta ${r.meta > 0 ? 'meta-pos' : ''}">${fmtN(r.meta)}</td>
+        <td class="td-pct">${pctBar}</td>
       </tr>`;
   }).join('');
 }
@@ -189,10 +185,6 @@ elDateInput.addEventListener('change', () => {
   dateTimer = setTimeout(loadData, 500);
 });
 
-elSearch.addEventListener('input', e => {
-  searchText = e.target.value.trim();
-  renderTable();
-});
 
 document.querySelectorAll('th.sortable').forEach(th => {
   th.addEventListener('click', () => {
@@ -200,9 +192,9 @@ document.querySelectorAll('th.sortable').forEach(th => {
       sortDir = sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       sortCol = th.dataset.col;
-      sortDir = (th.dataset.col === 'qtde_tetra' || th.dataset.col === 'valor_tetra') ? 'desc' : 'asc';
+      sortDir = 'desc';
     }
-    renderTable();
+    renderRanking();
   });
 });
 

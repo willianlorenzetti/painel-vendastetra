@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { etag: false, maxAge: 0 }));
 
 // ── Configs ──────────────────────────────────────────────────────────────────
 
@@ -105,6 +105,7 @@ const SQL_FB_MG = `
   AND   p.pdv_psi_codigo       IN ('FF','AA')
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
+  AND   r.rep_nome         NOT LIKE '%IVANILDO%'
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
            p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome
 `;
@@ -131,6 +132,7 @@ const SQL_FB_SJC = `
   AND   p.pdv_psi_codigo       IN ('FF','AA')
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
+  AND   r.rep_nome         NOT LIKE '%IVANILDO%'
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
            p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome
 `;
@@ -157,8 +159,17 @@ BEGIN
   );
   CREATE INDEX IX_vts_data     ON [TI-DIRETORIA_VendasTetra] (pdv_data);
   CREATE INDEX IX_vts_emp_data ON [TI-DIRETORIA_VendasTetra] (emp, pdv_data);
-  PRINT 'Tabela TI-DIRETORIA_VendasTetra criada.';
-END
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID('[TI-DIRETORIA_VendasTetra]')
+               AND   name = 'subgrupo')
+  ALTER TABLE [TI-DIRETORIA_VendasTetra] ADD subgrupo NVARCHAR(100);
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID('[TI-DIRETORIA_VendasTetra]')
+               AND   name = 'sincronizado_em')
+  ALTER TABLE [TI-DIRETORIA_VendasTetra] ADD sincronizado_em DATETIME2 DEFAULT GETDATE();
 `;
 
 async function ensureTable() {
@@ -174,57 +185,108 @@ async function ensureTable() {
 
 // ── Sincroniza Firebird → SQL Server ─────────────────────────────────────────
 
+// Converte para string truncada no limite da coluna (evita erro de tamanho)
+function str(v, max) {
+  if (v == null) return null;
+  const s = String(v);
+  return max ? s.slice(0, max) : s;
+}
+
 async function syncToOwn(rows, dateParam) {
-  if (!ssConfigured(cfgOWN)) return;
-  if (!rows.length) return;
+  if (!ssConfigured(cfgOWN)) return [];
+  if (!rows.length) return [];
 
-  const pool = await getOwnPool();
+  // Pool exclusivo para o sync — evita contaminar o pool de leitura
+  const pool = new sql.ConnectionPool(cfgOWN);
+  await pool.connect();
 
+  // Limpa período
   await pool.request()
     .input('dateFrom', sql.DateTime, dateParam)
     .query(`DELETE FROM [TI-DIRETORIA_VendasTetra] WHERE pdv_data >= @dateFrom`);
 
-  const ps = new sql.PreparedStatement(pool);
-  ps.input('emp',            sql.VarChar(5));
-  ps.input('rep_nome',       sql.NVarChar(150));
-  ps.input('pvi_pro_codigo', sql.VarChar(30));
-  ps.input('pro_resumo',     sql.NVarChar(200));
-  ps.input('qtde',           sql.Decimal(15, 4));
-  ps.input('valortotal',     sql.Decimal(15, 2));
-  ps.input('pdv_numero',     sql.VarChar(30));
-  ps.input('pdv_data',       sql.Date);
-  ps.input('cli_codigo',     sql.VarChar(30));
-  ps.input('cli_nome',       sql.NVarChar(200));
-  ps.input('subgrupo',       sql.NVarChar(100));
+  // Monta linhas para inserção
+  const prepared = rows.map(r => ({
+    emp:            str(r.emp, 5)            ?? '',
+    rep_nome:       str(r.rep_nome, 150),
+    pvi_pro_codigo: str(r.pvi_pro_codigo, 30),
+    pro_resumo:     str(r.pro_resumo, 200),
+    qtde:           r.qtde       != null ? parseFloat(r.qtde)       : null,
+    valortotal:     r.valortotal != null ? parseFloat(r.valortotal) : null,
+    pdv_numero:     str(r.pdv_numero, 30),
+    pdv_data:       r.pdv_data ? new Date(r.pdv_data) : null,
+    cli_codigo:     str(r.cli_codigo, 30),
+    cli_nome:       str(r.cli_nome, 200),
+    subgrupo:       str(r.subgrupo, 100),
+  }));
 
-  await ps.prepare(`
-    INSERT INTO [TI-DIRETORIA_VendasTetra]
-      (emp, rep_nome, pvi_pro_codigo, pro_resumo, qtde, valortotal,
-       pdv_numero, pdv_data, cli_codigo, cli_nome, subgrupo)
-    VALUES
-      (@emp, @rep_nome, @pvi_pro_codigo, @pro_resumo, @qtde, @valortotal,
-       @pdv_numero, @pdv_data, @cli_codigo, @cli_nome, @subgrupo)
-  `);
+  // Insere em lotes de 20 (evita timeout e problemas de conexão)
+  const BATCH = 20;
+  const errosSinc = [];
+  let ok = 0;
 
-  try {
-    for (const r of rows) {
-      await ps.execute({
-        emp:            r.emp,
-        rep_nome:       r.rep_nome       || null,
-        pvi_pro_codigo: r.pvi_pro_codigo || null,
-        pro_resumo:     r.pro_resumo     || null,
-        qtde:           r.qtde      != null ? parseFloat(r.qtde)      : null,
-        valortotal:     r.valortotal!= null ? parseFloat(r.valortotal): null,
-        pdv_numero:     r.pdv_numero     || null,
-        pdv_data:       r.pdv_data ? new Date(r.pdv_data) : null,
-        cli_codigo:     r.cli_codigo     || null,
-        cli_nome:       r.cli_nome       || null,
-        subgrupo:       r.subgrupo       || null,
-      });
+  for (let i = 0; i < prepared.length; i += BATCH) {
+    const lote = prepared.slice(i, i + BATCH);
+    const req   = pool.request();
+    const vals  = lote.map((r, j) => {
+      const n = i + j;
+      req.input(`emp${n}`,  sql.VarChar(5),     r.emp);
+      req.input(`rep${n}`,  sql.NVarChar(150),  r.rep_nome);
+      req.input(`pro${n}`,  sql.VarChar(30),    r.pvi_pro_codigo);
+      req.input(`res${n}`,  sql.NVarChar(200),  r.pro_resumo);
+      req.input(`qty${n}`,  sql.Decimal(15,4),  r.qtde);
+      req.input(`val${n}`,  sql.Decimal(15,2),  r.valortotal);
+      req.input(`num${n}`,  sql.VarChar(30),    r.pdv_numero);
+      req.input(`dat${n}`,  sql.Date,           r.pdv_data);
+      req.input(`cod${n}`,  sql.VarChar(30),    r.cli_codigo);
+      req.input(`cli${n}`,  sql.NVarChar(200),  r.cli_nome);
+      req.input(`sub${n}`,  sql.NVarChar(100),  r.subgrupo);
+      return `(@emp${n},@rep${n},@pro${n},@res${n},@qty${n},@val${n},@num${n},@dat${n},@cod${n},@cli${n},@sub${n})`;
+    }).join(',');
+
+    try {
+      await req.query(`
+        INSERT INTO [TI-DIRETORIA_VendasTetra]
+          (emp,rep_nome,pvi_pro_codigo,pro_resumo,qtde,valortotal,pdv_numero,pdv_data,cli_codigo,cli_nome,subgrupo)
+        VALUES ${vals}
+      `);
+      ok += lote.length;
+    } catch (e) {
+      const msg = `Lote ${Math.floor(i/BATCH)+1} (linhas ${i+1}-${i+lote.length}): ${e.message}`;
+      errosSinc.push(msg);
+      console.error('[sync]', msg);
+
+      // Tenta linha a linha como fallback
+      for (const r of lote) {
+        try {
+          await pool.request()
+            .input('e', sql.VarChar(5),    r.emp)
+            .input('r', sql.NVarChar(150), r.rep_nome)
+            .input('p', sql.VarChar(30),   r.pvi_pro_codigo)
+            .input('s', sql.NVarChar(200), r.pro_resumo)
+            .input('q', sql.Decimal(15,4), r.qtde)
+            .input('v', sql.Decimal(15,2), r.valortotal)
+            .input('n', sql.VarChar(30),   r.pdv_numero)
+            .input('d', sql.Date,          r.pdv_data)
+            .input('c', sql.VarChar(30),   r.cli_codigo)
+            .input('l', sql.NVarChar(200), r.cli_nome)
+            .input('g', sql.NVarChar(100), r.subgrupo)
+            .query(`
+              INSERT INTO [TI-DIRETORIA_VendasTetra]
+                (emp,rep_nome,pvi_pro_codigo,pro_resumo,qtde,valortotal,pdv_numero,pdv_data,cli_codigo,cli_nome,subgrupo)
+              VALUES (@e,@r,@p,@s,@q,@v,@n,@d,@c,@l,@g)
+            `);
+          ok++;
+        } catch (e2) {
+          console.error(`[sync] linha falhou (${r.cli_nome}/${r.subgrupo}): ${e2.message}`);
+        }
+      }
     }
-  } finally {
-    await ps.unprepare();
   }
+
+  console.log(`[sync] ${ok}/${prepared.length} linhas inseridas.`);
+  await pool.close();
+  return errosSinc;
 }
 
 // ── Lê do SQL Server ─────────────────────────────────────────────────────────
@@ -318,24 +380,17 @@ app.get('/api/vendas', async (req, res) => {
 
   await Promise.all(tasks);
 
-  // 3) Salva no SQL Server (seu servidor)
+  console.log(`[FB] ${allRows.length} linhas | ${[...new Set(allRows.map(r=>`${r.emp}|${r.cli_codigo}`))].length} clientes`);
+
+  // 3) Salva no SQL Server em segundo plano — não bloqueia a resposta
   if (ssConfigured(cfgOWN) && allRows.length > 0) {
-    try {
-      await syncToOwn(allRows, dateParam);
-    } catch (e) {
-      erros.push(`Sync OWN: ${e.message}`);
-    }
+    syncToOwn([...allRows], dateParam).catch(e =>
+      console.error('[sync bg]', e.message)
+    );
   }
 
-  // 4) Lê do SQL Server (ou agrega direto se OWN não configurado)
-  let rows = allRows;
-  if (ssConfigured(cfgOWN)) {
-    try {
-      rows = await readFromOwn(dateParam, company);
-    } catch (e) {
-      erros.push(`Leitura OWN: ${e.message}`);
-    }
-  }
+  // 4) Usa SEMPRE os dados direto do Firebird (tempo real)
+  const rows = allRows;
 
   // 5) Agrega e responde
   const todosClientes = aggregate(rows);
@@ -352,22 +407,97 @@ app.get('/api/vendas', async (req, res) => {
   const totalQtde  = clientesTetra.reduce((s, c) => s + c.qtde_tetra,  0);
   const totalValor = clientesTetra.reduce((s, c) => s + c.valor_tetra, 0);
 
+  // Ranking por vendedor (calculado no servidor)
+  const repMap = {};
+  for (const c of todosClientes) {
+    const k = c.rep_nome || '(sem nome)';
+    if (!repMap[k]) repMap[k] = { rep_nome: k, total: 0, com_tetra: 0, meta: 0 };
+    repMap[k].total++;
+    if (c.qtde_tetra > 0)  repMap[k].com_tetra++;
+    if (c.qtde_tetra >= 10) repMap[k].meta++;
+  }
+  const ranking = Object.values(repMap).map(r => ({
+    ...r,
+    pct: r.total > 0 ? +((r.com_tetra / r.total) * 100).toFixed(1) : 0,
+  })).sort((a, b) => b.pct - a.pct);
+
   res.json({
     erros,
     sincronizado_em: new Date().toISOString(),
     kpis: {
-      totalPeriodo,        // todos os clientes do período (denominador do %)
+      totalPeriodo,
       comTetra: clientesTetra.length,
       atingiramMeta,
       pctMeta,
       totalQtdeTetra: totalQtde,
       totalValorTetra: totalValor,
     },
+    ranking,   // ranking por vendedor, pronto para exibir
     clientes: clientesTetra,
   });
 });
 
 app.get('/api/status', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+
+// ── Diagnóstico ───────────────────────────────────────────────────────────────
+
+app.get('/api/debug', async (req, res) => {
+  const from      = req.query.from || '2026-06-01';
+  const dateParam = new Date(`${from}T00:00:00`);
+  const resultado = {};
+
+  // Firebird MG
+  if (fbConfigured(cfgMG)) {
+    try {
+      const rows = await queryFirebird(cfgMG, SQL_FB_MG, [dateParam]);
+      const clientes = [...new Set(rows.map(r => r.cli_codigo))];
+      resultado.firebird_mg = { linhas: rows.length, clientes: clientes.length, lista_clientes: rows.map(r => ({ cli_codigo: r.cli_codigo, cli_nome: r.cli_nome, subgrupo: r.subgrupo, qtde: r.qtde })) };
+    } catch (e) {
+      resultado.firebird_mg = { erro: e.message };
+    }
+  } else {
+    resultado.firebird_mg = { erro: 'não configurado' };
+  }
+
+  // Firebird SJC
+  if (fbConfigured(cfgSJC)) {
+    try {
+      const rows = await queryFirebird(cfgSJC, SQL_FB_SJC, [dateParam]);
+      const clientes = [...new Set(rows.map(r => r.cli_codigo))];
+      resultado.firebird_sjc = { linhas: rows.length, clientes: clientes.length, lista_clientes: rows.map(r => ({ cli_codigo: r.cli_codigo, cli_nome: r.cli_nome, subgrupo: r.subgrupo, qtde: r.qtde })) };
+    } catch (e) {
+      resultado.firebird_sjc = { erro: e.message };
+    }
+  } else {
+    resultado.firebird_sjc = { erro: 'não configurado' };
+  }
+
+  // SQL Server OWN
+  if (ssConfigured(cfgOWN)) {
+    try {
+      const pool   = await getOwnPool();
+      const result = await pool.request()
+        .input('dateFrom', sql.DateTime, dateParam)
+        .query(`
+          SELECT emp, cli_codigo, cli_nome,
+                 COUNT(*)   AS linhas,
+                 SUM(qtde)  AS qtde_total,
+                 MAX(subgrupo) AS ultimo_subgrupo
+          FROM [TI-DIRETORIA_VendasTetra]
+          WHERE pdv_data >= @dateFrom
+          GROUP BY emp, cli_codigo, cli_nome
+          ORDER BY emp, cli_nome
+        `);
+      resultado.sql_server_own = { clientes: result.recordset.length, detalhe: result.recordset };
+    } catch (e) {
+      resultado.sql_server_own = { erro: e.message };
+    }
+  } else {
+    resultado.sql_server_own = { erro: 'não configurado' };
+  }
+
+  res.json(resultado);
+});
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 

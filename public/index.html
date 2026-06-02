@@ -15,7 +15,7 @@
   <header class="header">
     <div class="header-inner">
       <div class="header-title">
-        <span class="header-icon">🔑</span>
+        <img src="logo.png" alt="Dovale" class="header-logo" />
         <div>
           <h1>Painel de Vendas — Chave Tetra</h1>
           <p id="header-sync">—</p>
@@ -63,7 +63,7 @@
 
       <!-- % principal -->
       <div class="kpi-card kpi-card--feature">
-        <div class="kpi-icon kpi-icon--amber">
+        <div class="kpi-icon kpi-icon--blue">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="19" y1="5" x2="5" y2="19"/>
@@ -81,7 +81,7 @@
         </div>
       </div>
 
-      <!-- Clientes com tetra -->
+      <!-- Clientes com 10+ tetras (contagem) -->
       <div class="kpi-card">
         <div class="kpi-icon kpi-icon--blue">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
@@ -93,15 +93,15 @@
           </svg>
         </div>
         <div class="kpi-body">
-          <span class="kpi-label">Clientes com Tetra</span>
+          <span class="kpi-label">Clientes com 10+ Tetras</span>
           <span class="kpi-value" id="kpi-com-tetra">—</span>
-          <span class="kpi-sub" id="kpi-sub-periodo">— total no período</span>
+          <span class="kpi-sub" id="kpi-sub-periodo">de — no período</span>
         </div>
       </div>
 
       <!-- Qtde tetra -->
       <div class="kpi-card">
-        <div class="kpi-icon kpi-icon--amber">
+        <div class="kpi-icon kpi-icon--teal">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="7" width="20" height="14" rx="2"/>
@@ -115,36 +115,8 @@
         </div>
       </div>
 
-      <!-- Valor tetra -->
-      <div class="kpi-card">
-        <div class="kpi-icon kpi-icon--green">
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
-               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="1" x2="12" y2="23"/>
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        </div>
-        <div class="kpi-body">
-          <span class="kpi-label">Valor Tetra</span>
-          <span class="kpi-value" id="kpi-valor-tetra">—</span>
-          <span class="kpi-sub">somente Tetra</span>
-        </div>
-      </div>
 
     </section>
-
-    <!-- SEARCH -->
-    <div class="table-toolbar">
-      <div class="search-wrap">
-        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input type="text" id="search-input" placeholder="Buscar cliente ou vendedor..." />
-      </div>
-      <span class="table-count" id="table-count"></span>
-    </div>
 
     <!-- TABLE -->
     <div class="table-wrap">
@@ -152,15 +124,15 @@
         <div class="spinner"></div>
         <span>Carregando dados...</span>
       </div>
-      <div id="empty-state" class="empty-state hidden">Nenhum cliente encontrado com Tetra no período.</div>
+      <div id="empty-state" class="empty-state hidden">Nenhum dado encontrado para o período.</div>
       <table id="data-table" class="data-table hidden">
         <thead>
           <tr>
+            <th class="th-rank">#</th>
             <th class="sortable" data-col="rep_nome">Vendedor</th>
-            <th class="sortable" data-col="cli_codigo">Código</th>
-            <th class="sortable" data-col="cli_nome">Cliente</th>
-            <th class="sortable th-right" data-col="qtde_tetra">Qtde Tetra</th>
-            <th class="sortable th-right" data-col="valor_tetra">Valor Tetra</th>
+            <th class="sortable th-center" data-col="total">Total de Clientes</th>
+            <th class="sortable th-center" data-col="meta">Clientes com 10+ Tetras</th>
+            <th class="sortable th-center" data-col="pct">% Clientes com Tetra</th>
           </tr>
         </thead>
         <tbody id="table-body"></tbody>
