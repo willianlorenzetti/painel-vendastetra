@@ -10,7 +10,6 @@ const elTable        = document.getElementById('data-table');
 const elBody         = document.getElementById('table-body');
 const elAlertErrors  = document.getElementById('alert-errors');
 const elRefresh      = document.getElementById('btn-refresh');
-const elDateInput    = document.getElementById('input-date');
 const elProgressFill = document.getElementById('progress-fill');
 const elHeaderSync   = document.getElementById('header-sync');
 
@@ -29,17 +28,11 @@ function parseDateBR(str) {
 }
 
 /* ── Máscara de data ─────────────────────────────────────────────────────── */
-elDateInput.addEventListener('input', e => {
-  let v = e.target.value.replace(/\D/g, '').slice(0, 8);
-  if (v.length > 4) v = v.slice(0,2) + '/' + v.slice(2,4) + '/' + v.slice(4);
-  else if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
-  e.target.value = v;
-});
-
 /* ── Fetch ───────────────────────────────────────────────────────────────── */
+const DATE_FROM = '2026-06-02';
+
 async function loadData() {
-  const isoDate = parseDateBR(elDateInput.value);
-  if (!isoDate) { showError('Data inválida. Use DD/MM/AAAA.'); return; }
+  const isoDate = DATE_FROM;
 
   elRefresh.classList.add('loading');
   elLoading.classList.remove('hidden');
@@ -61,7 +54,7 @@ async function loadData() {
     if (json.sincronizado_em) {
       const d = new Date(json.sincronizado_em);
       elHeaderSync.textContent =
-        `Atualizado em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+        `A partir de 02/06/2026 · Atualizado em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
     }
 
     rankingData = json.ranking || [];
@@ -162,12 +155,6 @@ function showError(msg) {
 
 /* ── Eventos ─────────────────────────────────────────────────────────────── */
 elRefresh.addEventListener('click', loadData);
-
-let dateTimer;
-elDateInput.addEventListener('change', () => {
-  clearTimeout(dateTimer);
-  dateTimer = setTimeout(loadData, 500);
-});
 
 // Auto-refresh a cada 30 minutos
 setInterval(loadData, 30 * 60 * 1000);
