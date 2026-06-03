@@ -96,8 +96,6 @@ function renderKPIs(k) {
 }
 
 /* ── Ranking ──────────────────────────────────────────────────────────────── */
-var medalhas = ['🥇', '🥈', '🥉']; // 🥇🥈🥉
-
 function renderRanking() {
   var rows = rankingData.slice();
 
@@ -132,9 +130,7 @@ function renderRanking() {
   for (var i = 0; i < rows.length; i++) {
     var r   = rows[i];
     var pos = i + 1;
-    var badge = pos <= 3
-      ? '<span class="rank-medal">' + medalhas[i] + '</span>'
-      : '<span class="rank-num">'   + pos + '</span>';
+    var badge = '<span class="rank-num rank-pos-' + pos + '">' + pos + '</span>';
 
     var pctBar =
       '<div class="rank-pct-wrap">' +
