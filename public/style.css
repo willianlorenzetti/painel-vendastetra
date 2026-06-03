@@ -165,13 +165,14 @@ body {
 
 /* ── KPI grid ─────────────────────────────────────────────────────────────── */
 
-/* Base (TV): flexbox com margin hack */
+/* Base (TV): flexbox com margem só horizontal */
 .kpi-grid {
   display: -webkit-flex;
   display: flex;
   -webkit-flex-wrap: wrap;
   flex-wrap: wrap;
-  margin: -8px;
+  margin-left: -8px;
+  margin-right: -8px;
 }
 .kpi-card {
   background: #09192e; background: var(--surface);
@@ -185,9 +186,11 @@ body {
   -webkit-flex: 1 1 280px;
   flex: 1 1 280px;
   min-width: 280px;
-  margin: 8px;
-  -webkit-transition: border-color .2s, -webkit-transform .15s;
-  transition: border-color .2s, transform .15s;
+  margin-left: 8px;
+  margin-right: 8px;
+  margin-bottom: 16px;
+  -webkit-transition: border-color .2s;
+  transition: border-color .2s;
 }
 
 /* Moderno (PC): grid idêntico ao original */
@@ -325,20 +328,19 @@ body {
 .td-meta { text-align: center; }
 .meta-pos { color: #4da8ff; color: var(--blue-bright); font-size: 1.5rem; }
 
-/* ── Medalhas e badges ────────────────────────────────────────────────────── */
-.rank-medal { font-size: 2rem; line-height: 1; }
+/* ── Badges de posição ────────────────────────────────────────────────────── */
 .rank-num {
   display: -webkit-inline-flex; display: inline-flex;
   -webkit-align-items: center; align-items: center;
   -webkit-justify-content: center; justify-content: center;
-  width: 38px; height: 38px;
+  width: 42px; height: 42px;
   border-radius: 50%;
-  background: #0e2240; border: 1px solid #163356;
-  color: #5e8fb5; font-size: 1rem; font-weight: 700;
+  background: #0e2240; border: 2px solid #163356;
+  color: #5e8fb5; font-size: 1.1rem; font-weight: 800;
 }
-.rank-pos-1 { background: #b8860b; border-color: #FFD700; color: #fff; }
-.rank-pos-2 { background: #707070; border-color: #C0C0C0; color: #fff; }
-.rank-pos-3 { background: #7a4a1e; border-color: #CD7F32; color: #fff; }
+.rank-pos-1 { background: #7a5800; border-color: #FFD700; color: #FFD700; font-size: 1.3rem; }
+.rank-pos-2 { background: #4a4a4a; border-color: #C0C0C0; color: #C0C0C0; font-size: 1.3rem; }
+.rank-pos-3 { background: #5a2e00; border-color: #CD7F32; color: #CD7F32; font-size: 1.3rem; }
 
 /* ── Barra % por linha ────────────────────────────────────────────────────── */
 .rank-pct-num {

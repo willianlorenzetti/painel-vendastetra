@@ -130,10 +130,7 @@ function renderRanking() {
   for (var i = 0; i < rows.length; i++) {
     var r   = rows[i];
     var pos = i + 1;
-    var medalha = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : null;
-    var badge = medalha
-      ? '<span class="rank-medal">' + medalha + '</span>'
-      : '<span class="rank-num rank-pos-' + pos + '">' + pos + '</span>';
+    var badge = '<span class="rank-num rank-pos-' + pos + '">' + pos + '</span>';
 
     var pctBar =
       '<div class="rank-pct-wrap">' +
