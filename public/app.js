@@ -1,95 +1,109 @@
-/* ── State ───────────────────────────────────────────────────────────────── */
-let rankingData = [];
-let sortCol     = 'pct';
-let sortDir     = 'desc';
+/* app.js — ES5 puro: compatível com browsers antigos e novos */
 
-/* ── DOM refs ────────────────────────────────────────────────────────────── */
-const elLoading      = document.getElementById('loading');
-const elEmpty        = document.getElementById('empty-state');
-const elTable        = document.getElementById('data-table');
-const elBody         = document.getElementById('table-body');
-const elAlertErrors  = document.getElementById('alert-errors');
-const elRefresh      = document.getElementById('btn-refresh');
-const elProgressFill = document.getElementById('progress-fill');
-const elHeaderSync   = document.getElementById('header-sync');
+var rankingData  = [];
+var sortCol      = 'pct';
+var sortDir      = 'desc';
+var DATE_FROM    = '2026-06-02';
 
-/* ── Formatadores ────────────────────────────────────────────────────────── */
-const fmtBRL = v =>
-  (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+var elLoading     = document.getElementById('loading');
+var elEmpty       = document.getElementById('empty-state');
+var elTable       = document.getElementById('data-table');
+var elBody        = document.getElementById('table-body');
+var elAlertErrors = document.getElementById('alert-errors');
+var elRefresh     = document.getElementById('btn-refresh');
+var elProgressFill= document.getElementById('progress-fill');
+var elHeaderSync  = document.getElementById('header-sync');
 
-const fmtN = v =>
-  (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
-/* ── Data DD/MM/AAAA → YYYY-MM-DD ───────────────────────────────────────── */
-function parseDateBR(str) {
-  const m = str.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) return null;
-  return `${m[3]}-${m[2]}-${m[1]}`;
+/* ── Formatadores ─────────────────────────────────────────────────────────── */
+function fmtBRL(v) {
+  v = v || 0;
+  try { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+  catch(e) { return 'R$ ' + v.toFixed(2).replace('.', ','); }
 }
 
-/* ── Máscara de data ─────────────────────────────────────────────────────── */
-/* ── Fetch ───────────────────────────────────────────────────────────────── */
-const DATE_FROM = '2026-06-02';
+function fmtN(v) {
+  v = v || 0;
+  try { return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  catch(e) { return String(Math.round(v)); }
+}
 
-async function loadData() {
-  const isoDate = DATE_FROM;
-
+/* ── Fetch via XHR (sem depender da API fetch) ────────────────────────────── */
+function loadData() {
   elRefresh.classList.add('loading');
   elLoading.classList.remove('hidden');
   elEmpty.classList.add('hidden');
   elTable.classList.add('hidden');
   elAlertErrors.classList.add('hidden');
 
-  try {
-    const res  = await fetch(`/api/vendas?from=${isoDate}&company=all`);
-    const json = await res.json();
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/api/vendas?from=' + DATE_FROM + '&company=all', true);
 
-    if (!res.ok) { showError(json.error || 'Erro no servidor.'); return; }
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4) return;
 
-    if (json.erros?.length) {
-      elAlertErrors.innerHTML = '<strong>Atenção:</strong>' + json.erros.map(e => `<br>• ${e}`).join('');
-      elAlertErrors.classList.remove('hidden');
-    }
-
-    if (json.sincronizado_em) {
-      const d = new Date(json.sincronizado_em);
-      elHeaderSync.textContent =
-        `A partir de 02/06/2026 · Atualizado em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
-    }
-
-    rankingData = json.ranking || [];
-
-    renderKPIs(json.kpis || {});
-    renderRanking();
-
-  } catch (err) {
-    showError('Falha ao conectar: ' + err.message);
-  } finally {
     elRefresh.classList.remove('loading');
     elLoading.classList.add('hidden');
-  }
+
+    if (xhr.status >= 200 && xhr.status < 300) {
+      try {
+        var json = JSON.parse(xhr.responseText);
+
+        if (json.erros && json.erros.length) {
+          var msgs = '';
+          for (var i = 0; i < json.erros.length; i++) msgs += '<br>• ' + json.erros[i];
+          elAlertErrors.innerHTML = '<strong>Atenção:</strong>' + msgs;
+          elAlertErrors.classList.remove('hidden');
+        }
+
+        if (json.sincronizado_em) {
+          var d = new Date(json.sincronizado_em);
+          elHeaderSync.textContent =
+            'A partir de 02/06/2026 · Atualizado em ' +
+            d.toLocaleDateString('pt-BR') + ' às ' +
+            d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        rankingData = json.ranking || [];
+        renderKPIs(json.kpis || {});
+        renderRanking();
+
+      } catch(e) {
+        showError('Erro ao processar resposta: ' + e.message);
+      }
+    } else {
+      showError('Erro no servidor (status ' + xhr.status + ')');
+    }
+  };
+
+  xhr.onerror = function() {
+    elRefresh.classList.remove('loading');
+    elLoading.classList.add('hidden');
+    showError('Falha ao conectar com o servidor.');
+  };
+
+  xhr.send();
 }
 
-/* ── KPIs ────────────────────────────────────────────────────────────────── */
+/* ── KPIs ─────────────────────────────────────────────────────────────────── */
 function renderKPIs(k) {
-  setText('kpi-pct-meta',    `${k.pctMeta ?? 0}%`);
-  setText('kpi-sub-meta',    `${fmtN(k.atingiramMeta)} de ${fmtN(k.totalPeriodo)} clientes no período`);
+  var pct = k.pctMeta || 0;
+  setText('kpi-pct-meta',    pct + '%');
+  setText('kpi-sub-meta',    fmtN(k.atingiramMeta) + ' de ' + fmtN(k.totalPeriodo) + ' clientes no período');
   setText('kpi-com-tetra',   fmtN(k.atingiramMeta));
-  setText('kpi-sub-periodo', `de ${fmtN(k.totalPeriodo)} no período`);
+  setText('kpi-sub-periodo', 'de ' + fmtN(k.totalPeriodo) + ' no período');
   setText('kpi-total-qtde',  fmtN(k.totalQtdeTetra));
-  setText('kpi-valor-tetra', fmtBRL(k.totalValorTetra));
-  elProgressFill.style.width = `${Math.min(k.pctMeta ?? 0, 100)}%`;
+  elProgressFill.style.width = Math.min(pct, 100) + '%';
 }
 
-/* ── Render ranking ──────────────────────────────────────────────────────── */
-const medalhas = ['🥇', '🥈', '🥉'];
+/* ── Ranking ──────────────────────────────────────────────────────────────── */
+var medalhas = ['🥇', '🥈', '🥉']; // 🥇🥈🥉
 
 function renderRanking() {
-  let rows = [...rankingData];
+  var rows = rankingData.slice();
 
-  rows.sort((a, b) => {
-    let va = a[sortCol] ?? 0;
-    let vb = b[sortCol] ?? 0;
+  rows.sort(function(a, b) {
+    var va = (a[sortCol] !== null && a[sortCol] !== undefined) ? a[sortCol] : 0;
+    var vb = (b[sortCol] !== null && b[sortCol] !== undefined) ? b[sortCol] : 0;
     if (typeof va === 'string') va = va.toLowerCase();
     if (typeof vb === 'string') vb = vb.toLowerCase();
     if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -97,12 +111,13 @@ function renderRanking() {
     return 0;
   });
 
-  document.querySelectorAll('th.sortable').forEach(th => {
-    th.classList.remove('sort-asc', 'sort-desc');
-    if (th.dataset.col === sortCol)
-      th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
-  });
-
+  var ths = document.querySelectorAll('th.sortable');
+  for (var h = 0; h < ths.length; h++) {
+    ths[h].classList.remove('sort-asc', 'sort-desc');
+    if (ths[h].getAttribute('data-col') === sortCol) {
+      ths[h].classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  }
 
   if (!rows.length) {
     elTable.classList.add('hidden');
@@ -113,64 +128,73 @@ function renderRanking() {
   elEmpty.classList.add('hidden');
   elTable.classList.remove('hidden');
 
-  elBody.innerHTML = rows.map((r, i) => {
-    const pos     = i + 1;
-    const badge   = pos <= 3
-      ? `<span class="rank-medal">${medalhas[i]}</span>`
-      : `<span class="rank-num">${pos}</span>`;
-    const pctBar  = `
-      <div class="rank-pct-wrap">
-        <span class="rank-pct-num ${r.pct >= 50 ? 'pct-high' : ''}">${r.pct}%</span>
-        <div class="rank-bar"><div class="rank-bar-fill" style="width:${Math.min(r.pct,100)}%"></div></div>
-      </div>`;
+  var html = '';
+  for (var i = 0; i < rows.length; i++) {
+    var r   = rows[i];
+    var pos = i + 1;
+    var badge = pos <= 3
+      ? '<span class="rank-medal">' + medalhas[i] + '</span>'
+      : '<span class="rank-num">'   + pos + '</span>';
 
-    return `
-      <tr>
-        <td class="td-rank">${badge}</td>
-        <td class="td-vendedor">${esc(r.rep_nome)}</td>
-        <td class="td-num">${fmtN(r.total)}</td>
-        <td class="td-num td-meta ${r.meta > 0 ? 'meta-pos' : ''}">${fmtN(r.meta)}</td>
-        <td class="td-pct">${pctBar}</td>
-      </tr>`;
-  }).join('');
+    var pctBar =
+      '<div class="rank-pct-wrap">' +
+        '<span class="rank-pct-num' + (r.pct >= 50 ? ' pct-high' : '') + '">' + r.pct + '%</span>' +
+        '<div class="rank-bar">' +
+          '<div class="rank-bar-fill" style="width:' + Math.min(r.pct, 100) + '%"></div>' +
+        '</div>' +
+      '</div>';
+
+    html +=
+      '<tr>' +
+        '<td class="td-rank">' + badge + '</td>' +
+        '<td class="td-vendedor">' + esc(r.rep_nome) + '</td>' +
+        '<td class="td-num">' + fmtN(r.total) + '</td>' +
+        '<td class="td-num td-meta' + (r.meta > 0 ? ' meta-pos' : '') + '">' + fmtN(r.meta) + '</td>' +
+        '<td class="td-pct">' + pctBar + '</td>' +
+      '</tr>';
+  }
+  elBody.innerHTML = html;
 }
 
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
 function setText(id, val) {
-  const el = document.getElementById(id);
+  var el = document.getElementById(id);
   if (el) el.textContent = val;
 }
 
 function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function showError(msg) {
   elLoading.classList.add('hidden');
-  elAlertErrors.innerHTML = `<strong>Erro:</strong> ${esc(msg)}`;
+  elAlertErrors.innerHTML = '<strong>Erro:</strong> ' + esc(msg);
   elAlertErrors.classList.remove('hidden');
 }
 
-/* ── Eventos ─────────────────────────────────────────────────────────────── */
+/* ── Eventos ──────────────────────────────────────────────────────────────── */
 elRefresh.addEventListener('click', loadData);
 
-// Auto-refresh a cada 30 minutos
-setInterval(loadData, 30 * 60 * 1000);
+(function() {
+  var ths = document.querySelectorAll('th.sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-col');
+        if (sortCol === col) {
+          sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortCol = col;
+          sortDir = 'desc';
+        }
+        renderRanking();
+      });
+    })(ths[i]);
+  }
+})();
 
+setInterval(loadData, 1800000);
 
-document.querySelectorAll('th.sortable').forEach(th => {
-  th.addEventListener('click', () => {
-    if (sortCol === th.dataset.col) {
-      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortCol = th.dataset.col;
-      sortDir = 'desc';
-    }
-    renderRanking();
-  });
-});
-
-/* ── Init ────────────────────────────────────────────────────────────────── */
 loadData();

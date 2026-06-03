@@ -30,13 +30,16 @@ html { font-size: 17px; }
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
+  background: #05101f;
   background: var(--bg);
+  color: #ddeeff;
   color: var(--text);
   min-height: 100vh;
 }
 
 /* ── Header ───────────────────────────────────────────────────────────────── */
 .header {
+  background: #071526;
   background: var(--blue-dark);
   border-bottom: 1px solid var(--border);
   padding: 0 32px;
@@ -169,6 +172,7 @@ body {
   gap: 16px;
 }
 .kpi-card {
+  background: #09192e;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -249,6 +253,7 @@ body {
 
 /* ── Table ────────────────────────────────────────────────────────────────── */
 .table-wrap {
+  background: #09192e;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
