@@ -260,16 +260,16 @@ body {
   font-size: .83rem;
 }
 .data-table thead th {
-  background: var(--blue-dark);
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: .72rem;
+  background: var(--surface2);
+  color: var(--blue-bright);
+  font-weight: 700;
+  font-size: .9rem;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: .08em;
   padding: 11px 16px;
   text-align: left;
   white-space: nowrap;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--blue);
   user-select: none;
 }
 .data-table thead th.th-right  { text-align: right; }

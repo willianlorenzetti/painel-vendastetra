@@ -106,6 +106,7 @@ const SQL_FB_MG = `
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
+  AND   pro.pro_tipo           IN ('PA')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
            p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome
 `;
@@ -133,6 +134,7 @@ const SQL_FB_SJC = `
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
+  AND   pro.pro_tipo           IN ('PA')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
            p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome
 `;
@@ -418,7 +420,7 @@ app.get('/api/vendas', async (req, res) => {
   }
   const ranking = Object.values(repMap).map(r => ({
     ...r,
-    pct: r.total > 0 ? +((r.com_tetra / r.total) * 100).toFixed(1) : 0,
+    pct: r.total > 0 ? +((r.meta / r.total) * 100).toFixed(1) : 0,
   })).sort((a, b) => b.pct - a.pct);
 
   res.json({
