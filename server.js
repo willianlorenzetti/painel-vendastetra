@@ -315,7 +315,7 @@ async function readFromOwn(dateParam, company) {
 function isTetra(subgrupo, pro_tipo) {
   return subgrupo
     && String(subgrupo).toUpperCase().includes('TETRA')
-    && String(pro_tipo || '').toUpperCase() === 'PA';
+    && String(pro_tipo  || '').toUpperCase() === 'PA';
 }
 
 function aggregate(rows) {
@@ -335,7 +335,7 @@ function aggregate(rows) {
     }
     const c = map[key];
     c.valor_total += parseFloat(r.valortotal) || 0;
-    if (isTetra(r.subgrupo)) {
+    if (isTetra(r.subgrupo, r.pro_tipo)) {
       c.qtde_tetra  += parseFloat(r.qtde)       || 0;
       c.valor_tetra += parseFloat(r.valortotal)  || 0;
     }
