@@ -94,7 +94,8 @@ const SQL_FB_MG = `
          p.pdv_data,
          c.cli_codigo,
          c.cli_nome,
-         s.nome                  AS subgrupo
+         s.nome                  AS subgrupo,
+         pro.pro_tipo
   FROM pedidos_vendas p
   INNER JOIN pedidos_vendas_itens pvi ON pvi.pvi_numero     = p.pdv_numero
   INNER JOIN produtos             pro ON pro.pro_codigo      = pvi.pvi_pro_codigo
@@ -106,9 +107,8 @@ const SQL_FB_MG = `
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
-  AND   pro.pro_tipo           IN ('PA')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
-           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome
+           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome, pro.pro_tipo
 `;
 
 const SQL_FB_SJC = `
@@ -122,7 +122,8 @@ const SQL_FB_SJC = `
          p.pdv_data,
          c.cli_codigo,
          c.cli_nome,
-         s.nome                  AS subgrupo
+         s.nome                  AS subgrupo,
+         pro.pro_tipo
   FROM pedidos_vendas p
   INNER JOIN pedidos_vendas_itens pvi ON pvi.pvi_numero     = p.pdv_numero
   INNER JOIN produtos             pro ON pro.pro_codigo      = pvi.pvi_pro_codigo
@@ -134,9 +135,8 @@ const SQL_FB_SJC = `
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
-  AND   pro.pro_tipo           IN ('PA')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
-           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome
+           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome, pro.pro_tipo
 `;
 
 // ── Cria tabela no SQL Server (se não existir) ───────────────────────────────
@@ -312,8 +312,10 @@ async function readFromOwn(dateParam, company) {
 
 // ── Agrega por cliente ────────────────────────────────────────────────────────
 
-function isTetra(subgrupo) {
-  return subgrupo && String(subgrupo).toUpperCase().includes('TETRA');
+function isTetra(subgrupo, pro_tipo) {
+  return subgrupo
+    && String(subgrupo).toUpperCase().includes('TETRA')
+    && String(pro_tipo || '').toUpperCase() === 'PA';
 }
 
 function aggregate(rows) {
