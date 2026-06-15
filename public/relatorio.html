@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Detalhes por Vendedor | Campanha Tetra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-title">
+        <img src="logo.png" alt="Dovale" class="header-logo" />
+        <div>
+          <h1>Detalhes por Vendedor - Campanha Tetra</h1>
+          <p id="header-sync">—</p>
+        </div>
+      </div>
+
+      <div class="header-filters">
+        <a class="btn-nav" href="index.html" title="Voltar ao painel">&#8592; Painel</a>
+
+        <button class="btn-refresh" id="btn-download" title="Baixar planilha (Excel/CSV)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Baixar Excel
+        </button>
+
+        <button class="btn-refresh" id="btn-refresh" title="Atualizar dados">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M8 16H3v5"/>
+          </svg>
+          Atualizar
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ERROS -->
+    <div id="alert-errors" class="alert hidden"></div>
+
+    <!-- VENCEDOR EM DESTAQUE -->
+    <section id="winner-card" class="kpi-grid hidden">
+      <div class="kpi-card kpi-card--feature" style="-webkit-flex:1 1 100%;flex:1 1 100%;">
+        <div class="kpi-icon kpi-icon--blue">
+          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+            <path d="M4 22h16"/>
+            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-label">🏆 Vendedor Ganhador</span>
+          <span class="kpi-value kpi-value--xl" id="winner-name">—</span>
+          <span class="kpi-sub" id="winner-sub">—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RANKING DE VENDEDORES (clicável) -->
+    <div class="table-wrap">
+      <div id="loading" class="loading-state">
+        <div class="spinner"></div>
+        <span>Carregando dados...</span>
+      </div>
+      <div id="empty-state" class="empty-state hidden">Nenhum vendedor com clientes 10+ tetras no período.</div>
+      <table id="data-table" class="data-table hidden">
+        <thead>
+          <tr>
+            <th class="th-rank">#</th>
+            <th>Vendedor</th>
+            <th class="th-center">Clientes com 10+ Tetras</th>
+            <th class="th-center">% com 10+ Tetras</th>
+            <th class="th-center">Total Tetras</th>
+            <th class="th-center">Detalhes</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <p class="hint-click" id="hint-click">Clique em um vendedor para ver os clientes e os pedidos.</p>
+
+  </main>
+
+  <script src="relatorio.js"></script>
+</body>
+</html>

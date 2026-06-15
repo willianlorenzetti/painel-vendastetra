@@ -443,6 +443,95 @@ app.get('/api/vendas', async (req, res) => {
   });
 });
 
+// ── Endpoint /api/clientes-tetra ───────────────────────────────────────────────
+// Clientes com 10+ tetras, com vendedor e número(s) de pedido, do top 1 pra baixo.
+
+app.get('/api/clientes-tetra', async (req, res) => {
+  const from = req.query.from || '2026-06-02';
+  const dateParam = new Date(`${from}T00:00:00`);
+  if (isNaN(dateParam)) return res.status(400).json({ error: 'Data inválida. Use YYYY-MM-DD.' });
+
+  const erros   = [];
+  let allRows   = [];
+  const tasks   = [];
+
+  if (fbConfigured(cfgMG)) {
+    tasks.push(queryFirebird(cfgMG, SQL_FB_MG, [dateParam])
+      .then(rows => { allRows = allRows.concat(rows); })
+      .catch(e => erros.push(e.message)));
+  } else { erros.push('MG não configurado.'); }
+
+  if (fbConfigured(cfgSJC)) {
+    tasks.push(queryFirebird(cfgSJC, SQL_FB_SJC, [dateParam])
+      .then(rows => { allRows = allRows.concat(rows); })
+      .catch(e => erros.push(e.message)));
+  } else { erros.push('SJC não configurado.'); }
+
+  await Promise.all(tasks);
+
+  // Agrega por cliente (TODOS os clientes), guardando tetras e pedidos
+  const map = {};
+  for (const r of allRows) {
+    const key = `${r.emp}||${r.cli_codigo}`;
+    if (!map[key]) {
+      map[key] = {
+        emp: r.emp, rep_nome: r.rep_nome,
+        cli_codigo: r.cli_codigo, cli_nome: r.cli_nome,
+        qtde_tetra: 0, valor_tetra: 0, pedidos: new Set(),
+      };
+    }
+    if (isTetra(r.subgrupo, r.pro_tipo)) {
+      const c = map[key];
+      c.qtde_tetra  += parseFloat(r.qtde)       || 0;
+      c.valor_tetra += parseFloat(r.valortotal) || 0;
+      if (r.pdv_numero != null) c.pedidos.add(String(r.pdv_numero));
+    }
+  }
+  const clientes = Object.values(map);
+
+  // Agrupa por vendedor (mesmo critério de % do painel principal)
+  const repMap = {};
+  for (const c of clientes) {
+    const k = c.rep_nome || '(sem nome)';
+    if (!repMap[k]) {
+      repMap[k] = { rep_nome: k, total_clientes: 0, clientes_meta: 0, qtde_tetra: 0, valor_tetra: 0, clientes: [] };
+    }
+    const g = repMap[k];
+    g.total_clientes++;
+    if (c.qtde_tetra >= 10) {
+      g.clientes_meta++;
+      g.qtde_tetra  += c.qtde_tetra;
+      g.valor_tetra += c.valor_tetra;
+      g.clientes.push({
+        emp:         c.emp,
+        cli_codigo:  c.cli_codigo,
+        cli_nome:    c.cli_nome,
+        qtde_tetra:  c.qtde_tetra,
+        valor_tetra: c.valor_tetra,
+        pedidos:     [...c.pedidos].sort((a, b) => Number(a) - Number(b)),
+      });
+    }
+  }
+
+  // Só vendedores com pelo menos 1 cliente na meta; ordenado por % (e desempate por qtde de clientes)
+  const vendedores = Object.values(repMap)
+    .filter(g => g.clientes_meta > 0)
+    .map(g => ({
+      ...g,
+      pct: g.total_clientes > 0 ? +((g.clientes_meta / g.total_clientes) * 100).toFixed(1) : 0,
+      clientes: g.clientes.sort((a, b) => b.qtde_tetra - a.qtde_tetra),
+    }))
+    .sort((a, b) => (b.pct - a.pct) || (b.clientes_meta - a.clientes_meta) || (b.qtde_tetra - a.qtde_tetra));
+
+  res.json({
+    erros,
+    sincronizado_em: new Date().toISOString(),
+    total_meta:  clientes.filter(c => c.qtde_tetra >= 10).length,
+    total_qtde:  vendedores.reduce((s, g) => s + g.qtde_tetra, 0),
+    vendedores,
+  });
+});
+
 app.get('/api/status', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
 // ── Diagnóstico ───────────────────────────────────────────────────────────────

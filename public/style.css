@@ -117,6 +117,22 @@ body {
 }
 .btn-refresh svg { margin-right: 6px; }
 .btn-refresh:hover { background: #1a7fe8; }
+
+/* ── Nav button (entre páginas) ───────────────────────────────────────────── */
+.btn-nav {
+  display: -webkit-inline-flex; display: inline-flex;
+  -webkit-align-items: center; align-items: center;
+  background: #0e2240; background: var(--surface2);
+  border: 1px solid #163356; border: 1px solid var(--border);
+  color: #ddeeff; color: var(--text);
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn-nav:hover { border-color: #4da8ff; border-color: var(--blue-bright); color: #4da8ff; color: var(--blue-bright); }
 .btn-refresh.loading svg {
   -webkit-animation: spin .8s linear infinite;
   animation: spin .8s linear infinite;
@@ -365,6 +381,41 @@ body {
   background: -webkit-linear-gradient(left, #1a6fd4, #4da8ff);
   background: linear-gradient(90deg, #1a6fd4, #4da8ff);
   border-radius: 99px;
+}
+
+/* ── Linhas clicáveis (drill-down por vendedor) ───────────────────────────── */
+.row-vendedor { cursor: pointer; }
+.row-vendedor:hover { background: #0e2240; background: var(--surface2); }
+.row-vendedor.is-open { background: #0e2240; background: var(--surface2); }
+.row-vendedor.is-open td { border-bottom-color: transparent; }
+.chevron { color: #4da8ff; color: var(--blue-bright); font-size: 1rem; }
+
+.row-detalhe .detalhe-cell {
+  padding: 0 24px 18px 24px;
+  background: #071526; background: var(--blue-dark);
+}
+.sub-table { width: 100%; border-collapse: collapse; }
+.sub-table td {
+  padding: 10px 12px;
+  font-size: .98rem;
+  color: #ddeeff; color: var(--text);
+  border-bottom: 1px solid #163356; border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.sub-table tr:last-child td { border-bottom: none; }
+.sub-pos {
+  width: 36px; text-align: center; font-weight: 700;
+  color: #5e8fb5; color: var(--text-muted);
+}
+.sub-cli { font-weight: 600; }
+.sub-emp { color: #5e8fb5; color: var(--text-muted); font-weight: 400; font-size: .85rem; }
+.sub-qtd { color: #4da8ff; color: var(--blue-bright); font-weight: 700; white-space: nowrap; text-align: right; }
+.sub-ped { color: #5e8fb5; color: var(--text-muted); white-space: nowrap; }
+
+.hint-click {
+  text-align: center;
+  color: #5e8fb5; color: var(--text-muted);
+  font-size: .85rem;
 }
 
 /* ── Loading / Empty ──────────────────────────────────────────────────────── */
