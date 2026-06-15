@@ -24,6 +24,15 @@
       </div>
 
       <div class="header-filters">
+        <!-- Filtro de período (entre) -->
+        <div class="date-filter date-range">
+          <label for="input-from">De</label>
+          <input type="date" id="input-from" />
+          <label for="input-to" class="lbl-to">até</label>
+          <input type="date" id="input-to" />
+          <button class="btn-apply" id="btn-apply" title="Aplicar período">Aplicar</button>
+        </div>
+
         <a class="btn-nav" href="index.html" title="Voltar ao painel">&#8592; Painel</a>
 
         <button class="btn-refresh" id="btn-download" title="Baixar planilha (Excel/CSV)">

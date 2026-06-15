@@ -100,6 +100,31 @@ body {
   letter-spacing: .05em;
 }
 
+/* ── Date range (filtro entre) ────────────────────────────────────────────── */
+.date-range input[type="date"] {
+  background: #0e2240; background: var(--surface2);
+  border: 1px solid #163356; border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #ddeeff; color: var(--text);
+  padding: 6px 8px;
+  font-size: .85rem;
+  outline: none;
+  margin-right: 6px;
+}
+.date-range input[type="date"]::-webkit-calendar-picker-indicator { -webkit-filter: invert(.7); filter: invert(.7); cursor: pointer; }
+.date-range .lbl-to { margin: 0 6px 0 2px; }
+.btn-apply {
+  background: #1a6fd4; background: var(--blue);
+  border: 1px solid #4da8ff; border: 1px solid var(--blue-bright);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-apply:hover { background: #1a7fe8; }
+
 /* ── Refresh button ───────────────────────────────────────────────────────── */
 .btn-refresh {
   display: -webkit-flex;

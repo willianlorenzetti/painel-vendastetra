@@ -448,8 +448,15 @@ app.get('/api/vendas', async (req, res) => {
 
 app.get('/api/clientes-tetra', async (req, res) => {
   const from = req.query.from || '2026-06-02';
+  const to   = req.query.to   || null;
   const dateParam = new Date(`${from}T00:00:00`);
-  if (isNaN(dateParam)) return res.status(400).json({ error: 'Data inválida. Use YYYY-MM-DD.' });
+  if (isNaN(dateParam)) return res.status(400).json({ error: 'Data inicial inválida. Use YYYY-MM-DD.' });
+
+  let dateTo = null;
+  if (to) {
+    dateTo = new Date(`${to}T23:59:59`);
+    if (isNaN(dateTo)) return res.status(400).json({ error: 'Data final inválida. Use YYYY-MM-DD.' });
+  }
 
   const erros   = [];
   let allRows   = [];
@@ -468,6 +475,11 @@ app.get('/api/clientes-tetra', async (req, res) => {
   } else { erros.push('SJC não configurado.'); }
 
   await Promise.all(tasks);
+
+  // Limite final (filtro "entre"): mantém só o que tem data <= dateTo
+  if (dateTo) {
+    allRows = allRows.filter(r => r.pdv_data && new Date(r.pdv_data) <= dateTo);
+  }
 
   // Agrega por cliente (TODOS os clientes), guardando tetras e pedidos
   const map = {};

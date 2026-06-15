@@ -2,6 +2,7 @@
 
 var vendedores = [];
 var DATE_FROM  = '2026-06-02';
+var DATE_TO    = '';   // vazio = sem limite final
 var aberto     = {};   // controla quais vendedores estão expandidos
 
 var elLoading     = document.getElementById('loading');
@@ -16,6 +17,9 @@ var elWinnerCard  = document.getElementById('winner-card');
 var elWinnerName  = document.getElementById('winner-name');
 var elWinnerSub   = document.getElementById('winner-sub');
 var elHintClick   = document.getElementById('hint-click');
+var elFrom        = document.getElementById('input-from');
+var elTo          = document.getElementById('input-to');
+var elApply       = document.getElementById('btn-apply');
 
 /* ── Formatadores ─────────────────────────────────────────────────────────── */
 function fmtBRL(v) {
@@ -38,8 +42,9 @@ function loadData() {
   elWinnerCard.classList.add('hidden');
   elAlertErrors.classList.add('hidden');
 
+  var url = '/api/clientes-tetra?from=' + DATE_FROM + (DATE_TO ? '&to=' + DATE_TO : '');
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/api/clientes-tetra?from=' + DATE_FROM, true);
+  xhr.open('GET', url, true);
 
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== 4) return;
@@ -59,8 +64,10 @@ function loadData() {
 
         if (json.sincronizado_em) {
           var d = new Date(json.sincronizado_em);
+          var periodo = 'A partir de ' + brDate(DATE_FROM) +
+            (DATE_TO ? ' até ' + brDate(DATE_TO) : '');
           elHeaderSync.textContent =
-            'A partir de 02/06/2026 · Atualizado em ' +
+            periodo + ' · Atualizado em ' +
             d.toLocaleDateString('pt-BR') + ' às ' +
             d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         }
@@ -192,7 +199,7 @@ function baixarCSV() {
   var url  = URL.createObjectURL(blob);
   var a    = document.createElement('a');
   a.href = url;
-  a.download = 'detalhes-vendedores-tetra_' + DATE_FROM + '.csv';
+  a.download = 'detalhes-vendedores-tetra_' + DATE_FROM + (DATE_TO ? '_a_' + DATE_TO : '') + '.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -207,6 +214,27 @@ function esc(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function cssEsc(str) { return String(str || '').replace(/"/g, '\\"'); }
+function brDate(iso) {           // 'YYYY-MM-DD' -> 'DD/MM/AAAA'
+  if (!iso) return '';
+  var p = iso.split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+}
+function hojeISO() {
+  var d = new Date();
+  var mm = String(d.getMonth() + 1);
+  var dd = String(d.getDate());
+  if (mm.length < 2) mm = '0' + mm;
+  if (dd.length < 2) dd = '0' + dd;
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
+function aplicarPeriodo() {
+  var f = elFrom.value || '2026-06-02';
+  var t = elTo.value   || '';
+  if (t && t < f) { alert('A data final não pode ser anterior à inicial.'); return; }
+  DATE_FROM = f;
+  DATE_TO   = t;
+  loadData();
+}
 function showError(msg) {
   elLoading.classList.add('hidden');
   elAlertErrors.innerHTML = '<strong>Erro:</strong> ' + esc(msg);
@@ -216,6 +244,12 @@ function showError(msg) {
 /* ── Eventos ──────────────────────────────────────────────────────────────── */
 elRefresh.addEventListener('click', loadData);
 elDownload.addEventListener('click', baixarCSV);
+elApply.addEventListener('click', aplicarPeriodo);
+
+// Inicializa campos: De = 02/06/2026, Até = hoje
+elFrom.value = DATE_FROM;
+elTo.value   = hojeISO();
+DATE_TO      = elTo.value;
 
 setInterval(loadData, 1800000);
 loadData();
