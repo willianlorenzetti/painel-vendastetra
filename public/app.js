@@ -3,7 +3,8 @@
 var rankingData  = [];
 var sortCol      = 'pct';
 var sortDir      = 'desc';
-var DATE_FROM    = '2026-06-02';
+var DATE_FROM    = '2026-07-14';
+var DATE_TO      = '2026-07-17';
 
 var elLoading     = document.getElementById('loading');
 var elEmpty       = document.getElementById('empty-state');
@@ -36,7 +37,7 @@ function loadData() {
   elAlertErrors.classList.add('hidden');
 
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/api/vendas?from=' + DATE_FROM + '&company=all', true);
+  xhr.open('GET', '/api/vendas?from=' + DATE_FROM + '&to=' + DATE_TO + '&company=all', true);
 
   xhr.onreadystatechange = function() {
     if (xhr.readyState !== 4) return;
@@ -58,7 +59,7 @@ function loadData() {
         if (json.sincronizado_em) {
           var d = new Date(json.sincronizado_em);
           elHeaderSync.textContent =
-            'A partir de 02/06/2026 · Atualizado em ' +
+            'Campanha 14/07/2026 a 17/07/2026 · Atualizado em ' +
             d.toLocaleDateString('pt-BR') + ' às ' +
             d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         }
@@ -86,12 +87,12 @@ function loadData() {
 
 /* ── KPIs ─────────────────────────────────────────────────────────────────── */
 function renderKPIs(k) {
-  var pct = k.pctMeta || 0;
-  setText('kpi-pct-meta',    pct + '%');
-  setText('kpi-sub-meta',    fmtN(k.atingiramMeta) + ' de ' + fmtN(k.totalPeriodo) + ' clientes no período');
-  setText('kpi-com-tetra',   fmtN(k.atingiramMeta));
-  setText('kpi-sub-periodo', 'de ' + fmtN(k.totalPeriodo) + ' no período');
-  setText('kpi-total-qtde',  fmtN(k.totalQtdeTetra));
+  var pct = k.pctGeral || 0;
+  setText('kpi-pct-meta',     pct + '%');
+  setText('kpi-sub-meta',     fmtN(k.bateramMeta) + ' de ' + fmtN(k.totalVendedores) + ' vendedores bateram a meta');
+  setText('kpi-bateram-meta', fmtN(k.bateramMeta));
+  setText('kpi-sub-periodo',  'de ' + fmtN(k.totalVendedores) + ' vendedores');
+  setText('kpi-total-vendido', fmtBRL(k.totalVendido));
   elProgressFill.style.width = Math.min(pct, 100) + '%';
 }
 
@@ -144,8 +145,6 @@ function renderRanking() {
       '<tr>' +
         '<td class="td-rank">' + badge + '</td>' +
         '<td class="td-vendedor">' + esc(r.rep_nome) + '</td>' +
-        '<td class="td-num">' + fmtN(r.total) + '</td>' +
-        '<td class="td-num td-meta' + (r.meta > 0 ? ' meta-pos' : '') + '">' + fmtN(r.meta) + '</td>' +
         '<td class="td-pct">' + pctBar + '</td>' +
       '</tr>';
   }

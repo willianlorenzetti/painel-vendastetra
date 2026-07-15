@@ -95,7 +95,7 @@ body {
   color: #ddeeff; color: var(--text);
   padding: 6px 10px;
   font-size: .85rem;
-  width: 110px;
+  width: 210px;
   outline: none;
   letter-spacing: .05em;
 }
@@ -366,6 +366,50 @@ body {
   background: linear-gradient(90deg, #1a6fd4, #4da8ff);
   border-radius: 99px;
 }
+
+/* ── Página de detalhes ───────────────────────────────────────────────────── */
+.section-title {
+  padding: 16px 24px;
+  font-size: .8rem; font-weight: 700;
+  color: #4da8ff; color: var(--blue-bright);
+  text-transform: uppercase; letter-spacing: .06em;
+  border-bottom: 1px solid #163356; border-bottom: 1px solid var(--border);
+}
+/* Linhas clicáveis (resumo por vendedora) */
+.row-click { cursor: pointer; }
+.row-click:hover { background: #0e2240; background: var(--surface2); }
+.row-selected { background: rgba(29,110,212,.18); background: var(--blue-dim); }
+.row-selected:hover { background: rgba(29,110,212,.24); }
+
+/* Linha expandida (accordion) com os pedidos da vendedora */
+.expand-row td { padding: 0; }
+.pedidos-expand {
+  background: #071526; background: var(--blue-dark);
+  padding: 12px 24px 20px;
+  border-bottom: 1px solid #163356; border-bottom: 1px solid var(--border);
+}
+.pedidos-expand-empty {
+  padding: 12px 4px;
+  color: #5e8fb5; color: var(--text-muted);
+  font-size: .85rem;
+}
+.mini-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.mini-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #5e8fb5; color: var(--text-muted);
+  font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid #163356; border-bottom: 1px solid var(--border);
+}
+.mini-table thead th.th-right { text-align: right; }
+.mini-table tbody td {
+  padding: 8px 12px;
+  color: #ddeeff; color: var(--text);
+  border-bottom: 1px solid rgba(22,51,86,.5);
+}
+.mini-table tbody tr:last-child td { border-bottom: none; }
+.mini-table td.td-right { text-align: right; font-weight: 600; }
 
 /* ── Loading / Empty ──────────────────────────────────────────────────────── */
 .loading-state, .empty-state {

@@ -94,21 +94,26 @@ const SQL_FB_MG = `
          p.pdv_data,
          c.cli_codigo,
          c.cli_nome,
-         s.nome                  AS subgrupo,
+         t.nome                  AS subgrupo,
+         s.nome                  AS familia,
          pro.pro_tipo
   FROM pedidos_vendas p
   INNER JOIN pedidos_vendas_itens pvi ON pvi.pvi_numero     = p.pdv_numero
   INNER JOIN produtos             pro ON pro.pro_codigo      = pvi.pvi_pro_codigo
   INNER JOIN representantes       r   ON r.rep_codigo        = p.pdv_rep_codigo
   INNER JOIN clientes             c   ON c.cli_codigo        = p.pdv_cli_codigo
+  LEFT  JOIN produtos_nivel2      t   ON t.codigo            = pro.pro_nivel2
   LEFT  JOIN produtos_nivel3      s   ON s.codigo            = pro.pro_nivel3
   WHERE p.pdv_data            >= ?
+  AND   p.pdv_data            <= ?
   AND   p.pdv_psi_codigo       IN ('FF','AA')
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
+  AND   pro.pro_nivel2 = 1
+  AND   pro.pro_nivel3 NOT IN ('1')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
-           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome, pro.pro_tipo
+           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, t.nome, s.nome, pro.pro_tipo
 `;
 
 const SQL_FB_SJC = `
@@ -122,22 +127,59 @@ const SQL_FB_SJC = `
          p.pdv_data,
          c.cli_codigo,
          c.cli_nome,
-         s.nome                  AS subgrupo,
+         t.nome                  AS subgrupo,
+         s.nome                  AS familia,
          pro.pro_tipo
   FROM pedidos_vendas p
   INNER JOIN pedidos_vendas_itens pvi ON pvi.pvi_numero     = p.pdv_numero
   INNER JOIN produtos             pro ON pro.pro_codigo      = pvi.pvi_pro_codigo
   INNER JOIN representantes       r   ON r.rep_codigo        = p.pdv_rep_codigo
   INNER JOIN clientes             c   ON c.cli_codigo        = p.pdv_cli_codigo
+  LEFT  JOIN produtos_nivel2      t   ON t.codigo            = pro.pro_nivel2
   LEFT  JOIN produtos_nivel3      s   ON s.codigo            = pro.pro_nivel3
   WHERE p.pdv_data            >= ?
+  AND   p.pdv_data            <= ?
   AND   p.pdv_psi_codigo       IN ('FF','AA')
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
+  AND   pro.pro_nivel2 = 1
+  AND   pro.pro_nivel3 NOT IN ('1')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
-           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, s.nome, pro.pro_tipo
+           p.pdv_numero, p.pdv_data, c.cli_codigo, c.cli_nome, t.nome, s.nome, pro.pro_tipo
 `;
+
+// ── Campanha "Outras Chaves" ─────────────────────────────────────────────────
+
+const CAMPANHA_INICIO = '2026-07-14';
+const CAMPANHA_FIM    = '2026-07-17';
+
+// Metas de valor (R$) por vendedor no período da campanha
+const METAS_VENDEDOR = {
+  'TELEVENDAS DANIELA SILVA':   500,
+  'TELEVENDAS DEBORA':          3200,
+  'TELEVENDAS ISABELLA RODRIGUES':  800,
+  'TELEVENDAS LAIS':            5600,
+  'TELEVENDAS LUCIMARA':        5600,
+  'TELEVENDAS MARIA SAMARA':     800,
+  'TELEVENDAS NAIARA':          5600,
+  'TELEVENDAS POLIANA RODRIGUES':  4800,
+  'TELEVENDAS SERGIO':          4800,
+  'TELEVENDAS SUELI FERREIRA':  4000,
+  'TELEVENDAS SUELIN':          6400,
+  'TELEVENDAS ANA ROSA':         500,
+  'TELEVENDAS INGRID PRADO':     500,
+  'TELEVENDAS NADIA APARECIDA': 1250,
+  'TELEVENDAS NATHALIA ALMEIDA': 3100,
+  'TELEVENDAS REBECA PEREIRA':   500,
+  'TELEVENDAS SUZANA FRANCINE': 3400,
+  'TELEVENDAS ELLEN MATOS':      500,
+  'TELEVENDAS ELLEN VITORIA':    500,
+};
+
+function normRep(nome) {
+  return String(nome || '').trim().toUpperCase();
+}
 
 // ── Cria tabela no SQL Server (se não existir) ───────────────────────────────
 
@@ -157,6 +199,7 @@ BEGIN
     cli_codigo      VARCHAR(30),
     cli_nome        NVARCHAR(200),
     subgrupo        NVARCHAR(100),
+    familia         NVARCHAR(100),
     sincronizado_em DATETIME2 DEFAULT GETDATE()
   );
   CREATE INDEX IX_vts_data     ON [TI-DIRETORIA_VendasTetra] (pdv_data);
@@ -167,6 +210,11 @@ IF NOT EXISTS (SELECT 1 FROM sys.columns
                WHERE object_id = OBJECT_ID('[TI-DIRETORIA_VendasTetra]')
                AND   name = 'subgrupo')
   ALTER TABLE [TI-DIRETORIA_VendasTetra] ADD subgrupo NVARCHAR(100);
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID('[TI-DIRETORIA_VendasTetra]')
+               AND   name = 'familia')
+  ALTER TABLE [TI-DIRETORIA_VendasTetra] ADD familia NVARCHAR(100);
 
 IF NOT EXISTS (SELECT 1 FROM sys.columns
                WHERE object_id = OBJECT_ID('[TI-DIRETORIA_VendasTetra]')
@@ -190,11 +238,11 @@ async function ensureTable() {
 // Converte para string truncada no limite da coluna (evita erro de tamanho)
 function str(v, max) {
   if (v == null) return null;
-  const s = String(v);
+  const s = String(v).trim();
   return max ? s.slice(0, max) : s;
 }
 
-async function syncToOwn(rows, dateParam) {
+async function syncToOwn(rows, dateFrom, dateTo) {
   if (!ssConfigured(cfgOWN)) return [];
   if (!rows.length) return [];
 
@@ -204,8 +252,9 @@ async function syncToOwn(rows, dateParam) {
 
   // Limpa período
   await pool.request()
-    .input('dateFrom', sql.DateTime, dateParam)
-    .query(`DELETE FROM [TI-DIRETORIA_VendasTetra] WHERE pdv_data >= @dateFrom`);
+    .input('dateFrom', sql.DateTime, dateFrom)
+    .input('dateTo',   sql.DateTime, dateTo)
+    .query(`DELETE FROM [TI-DIRETORIA_VendasTetra] WHERE pdv_data >= @dateFrom AND pdv_data <= @dateTo`);
 
   // Monta linhas para inserção
   const prepared = rows.map(r => ({
@@ -220,6 +269,7 @@ async function syncToOwn(rows, dateParam) {
     cli_codigo:     str(r.cli_codigo, 30),
     cli_nome:       str(r.cli_nome, 200),
     subgrupo:       str(r.subgrupo, 100),
+    familia:        str(r.familia, 100),
   }));
 
   // Insere em lotes de 20 (evita timeout e problemas de conexão)
@@ -243,13 +293,14 @@ async function syncToOwn(rows, dateParam) {
       req.input(`cod${n}`,  sql.VarChar(30),    r.cli_codigo);
       req.input(`cli${n}`,  sql.NVarChar(200),  r.cli_nome);
       req.input(`sub${n}`,  sql.NVarChar(100),  r.subgrupo);
-      return `(@emp${n},@rep${n},@pro${n},@res${n},@qty${n},@val${n},@num${n},@dat${n},@cod${n},@cli${n},@sub${n})`;
+      req.input(`fam${n}`,  sql.NVarChar(100),  r.familia);
+      return `(@emp${n},@rep${n},@pro${n},@res${n},@qty${n},@val${n},@num${n},@dat${n},@cod${n},@cli${n},@sub${n},@fam${n})`;
     }).join(',');
 
     try {
       await req.query(`
         INSERT INTO [TI-DIRETORIA_VendasTetra]
-          (emp,rep_nome,pvi_pro_codigo,pro_resumo,qtde,valortotal,pdv_numero,pdv_data,cli_codigo,cli_nome,subgrupo)
+          (emp,rep_nome,pvi_pro_codigo,pro_resumo,qtde,valortotal,pdv_numero,pdv_data,cli_codigo,cli_nome,subgrupo,familia)
         VALUES ${vals}
       `);
       ok += lote.length;
@@ -273,10 +324,11 @@ async function syncToOwn(rows, dateParam) {
             .input('c', sql.VarChar(30),   r.cli_codigo)
             .input('l', sql.NVarChar(200), r.cli_nome)
             .input('g', sql.NVarChar(100), r.subgrupo)
+            .input('f', sql.NVarChar(100), r.familia)
             .query(`
               INSERT INTO [TI-DIRETORIA_VendasTetra]
-                (emp,rep_nome,pvi_pro_codigo,pro_resumo,qtde,valortotal,pdv_numero,pdv_data,cli_codigo,cli_nome,subgrupo)
-              VALUES (@e,@r,@p,@s,@q,@v,@n,@d,@c,@l,@g)
+                (emp,rep_nome,pvi_pro_codigo,pro_resumo,qtde,valortotal,pdv_numero,pdv_data,cli_codigo,cli_nome,subgrupo,familia)
+              VALUES (@e,@r,@p,@s,@q,@v,@n,@d,@c,@l,@g,@f)
             `);
           ok++;
         } catch (e2) {
@@ -310,57 +362,27 @@ async function readFromOwn(dateParam, company) {
   return result.recordset;
 }
 
-// ── Agrega por cliente ────────────────────────────────────────────────────────
+// ── Filtro "Outras Chaves" (o SQL já restringe a nivel2=1 / nivel3<>1) ───────
 
-function isTetra(subgrupo, pro_tipo) {
-  return subgrupo
-    && String(subgrupo).toUpperCase().includes('TETRA')
-    && String(pro_tipo  || '').toUpperCase() === 'PA';
+function isOutrasChaves(pro_tipo) {
+  return String(pro_tipo || '').toUpperCase() === 'PA';
 }
 
-function aggregate(rows) {
-  const map = {};
-  for (const r of rows) {
-    const key = `${r.emp}||${r.cli_codigo}`;
-    if (!map[key]) {
-      map[key] = {
-        emp:         r.emp,
-        rep_nome:    r.rep_nome,
-        cli_codigo:  r.cli_codigo,
-        cli_nome:    r.cli_nome,
-        qtde_tetra:  0,
-        valor_tetra: 0,
-        valor_total: 0,
-      };
-    }
-    const c = map[key];
-    c.valor_total += parseFloat(r.valortotal) || 0;
-    if (isTetra(r.subgrupo, r.pro_tipo)) {
-      c.qtde_tetra  += parseFloat(r.qtde)       || 0;
-      c.valor_tetra += parseFloat(r.valortotal)  || 0;
-    }
-  }
-  return Object.values(map);
-}
+// ── Busca Firebird (MG/SJC) + sincroniza em segundo plano ───────────────────
 
-// ── Endpoint /api/vendas ──────────────────────────────────────────────────────
-
-app.get('/api/vendas', async (req, res) => {
-  const from    = req.query.from    || '2026-06-01';
-  const company = (req.query.company || 'all').toLowerCase();
-
-  const dateParam = new Date(`${from}T00:00:00`);
-  if (isNaN(dateParam)) return res.status(400).json({ error: 'Data inválida. Use YYYY-MM-DD.' });
+async function buscarVendas(from, to, company) {
+  const dateFrom = new Date(`${from}T00:00:00`);
+  const dateTo   = new Date(`${to}T23:59:59`);
+  if (isNaN(dateFrom) || isNaN(dateTo)) throw new Error('Data inválida. Use YYYY-MM-DD.');
 
   const erros   = [];
   let allRows   = [];
   const tasks   = [];
 
-  // 1) Busca no Firebird MG
   if (company === 'mg' || company === 'all') {
     if (fbConfigured(cfgMG)) {
       tasks.push(
-        queryFirebird(cfgMG, SQL_FB_MG, [dateParam])
+        queryFirebird(cfgMG, SQL_FB_MG, [dateFrom, dateTo])
           .then(rows => { allRows = allRows.concat(rows); })
           .catch(e => erros.push(e.message))
       );
@@ -369,11 +391,10 @@ app.get('/api/vendas', async (req, res) => {
     }
   }
 
-  // 2) Busca no Firebird SJC
   if (company === 'sjc' || company === 'all') {
     if (fbConfigured(cfgSJC)) {
       tasks.push(
-        queryFirebird(cfgSJC, SQL_FB_SJC, [dateParam])
+        queryFirebird(cfgSJC, SQL_FB_SJC, [dateFrom, dateTo])
           .then(rows => { allRows = allRows.concat(rows); })
           .catch(e => erros.push(e.message))
       );
@@ -386,58 +407,107 @@ app.get('/api/vendas', async (req, res) => {
 
   console.log(`[FB] ${allRows.length} linhas | ${[...new Set(allRows.map(r=>`${r.emp}|${r.cli_codigo}`))].length} clientes`);
 
-  // 3) Salva no SQL Server em segundo plano — não bloqueia a resposta
   if (ssConfigured(cfgOWN) && allRows.length > 0) {
-    syncToOwn([...allRows], dateParam).catch(e =>
+    syncToOwn([...allRows], dateFrom, dateTo).catch(e =>
       console.error('[sync bg]', e.message)
     );
   }
 
-  // 4) Usa SEMPRE os dados direto do Firebird (tempo real)
-  const rows = allRows;
+  return { erros, rows: allRows };
+}
 
-  // 5) Agrega e responde
-  const todosClientes = aggregate(rows);
-  // denominador do %: TODOS os clientes que compraram no período
-  const totalPeriodo  = todosClientes.length;
-  const atingiramMeta = todosClientes.filter(c => c.qtde_tetra >= 10).length;
-  const pctMeta       = totalPeriodo > 0 ? +((atingiramMeta / totalPeriodo) * 100).toFixed(1) : 0;
-
-  // tabela: apenas quem comprou tetra, ordenado por qtde decrescente
-  const clientesTetra = todosClientes
-    .filter(c => c.qtde_tetra > 0)
-    .sort((a, b) => b.qtde_tetra - a.qtde_tetra);
-
-  const totalQtde  = clientesTetra.reduce((s, c) => s + c.qtde_tetra,  0);
-  const totalValor = clientesTetra.reduce((s, c) => s + c.valor_tetra, 0);
-
-  // Ranking por vendedor (calculado no servidor)
-  const repMap = {};
-  for (const c of todosClientes) {
-    const k = c.rep_nome || '(sem nome)';
-    if (!repMap[k]) repMap[k] = { rep_nome: k, total: 0, com_tetra: 0, meta: 0 };
-    repMap[k].total++;
-    if (c.qtde_tetra > 0)  repMap[k].com_tetra++;
-    if (c.qtde_tetra >= 10) repMap[k].meta++;
+// Ranking por vendedor: % da meta de valor (R$) batida no período
+function calcularRanking(rows) {
+  const vendMap = {};
+  for (const nome in METAS_VENDEDOR) {
+    vendMap[normRep(nome)] = { rep_nome: nome.trim(), meta: METAS_VENDEDOR[nome], vendido: 0 };
   }
-  const ranking = Object.values(repMap).map(r => ({
-    ...r,
-    pct: r.total > 0 ? +((r.meta / r.total) * 100).toFixed(1) : 0,
+  for (const r of rows) {
+    if (!isOutrasChaves(r.pro_tipo)) continue;
+    const k = normRep(r.rep_nome);
+    if (!vendMap[k]) vendMap[k] = { rep_nome: str(r.rep_nome, 150), meta: 0, vendido: 0 };
+    vendMap[k].vendido += parseFloat(r.valortotal) || 0;
+  }
+  return Object.values(vendMap).map(r => ({
+    rep_nome: r.rep_nome,
+    meta:     r.meta,
+    vendido:  +r.vendido.toFixed(2),
+    pct:      r.meta > 0 ? +((r.vendido / r.meta) * 100).toFixed(1) : 0,
   })).sort((a, b) => b.pct - a.pct);
+}
+
+// ── Endpoint /api/vendas (ranking resumido) ──────────────────────────────────
+
+app.get('/api/vendas', async (req, res) => {
+  const from    = req.query.from    || CAMPANHA_INICIO;
+  const to      = req.query.to      || CAMPANHA_FIM;
+  const company = (req.query.company || 'all').toLowerCase();
+
+  let dados;
+  try {
+    dados = await buscarVendas(from, to, company);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
+  const ranking = calcularRanking(dados.rows);
+
+  const totalMeta    = ranking.reduce((s, r) => s + r.meta, 0);
+  const totalVendido = ranking.reduce((s, r) => s + r.vendido, 0);
+  const pctGeral      = totalMeta > 0 ? +((totalVendido / totalMeta) * 100).toFixed(1) : 0;
+  const bateramMeta   = ranking.filter(r => r.pct >= 100).length;
 
   res.json({
-    erros,
+    erros: dados.erros,
     sincronizado_em: new Date().toISOString(),
     kpis: {
-      totalPeriodo,
-      comTetra: clientesTetra.length,
-      atingiramMeta,
-      pctMeta,
-      totalQtdeTetra: totalQtde,
-      totalValorTetra: totalValor,
+      pctGeral,
+      bateramMeta,
+      totalVendedores: ranking.length,
+      totalVendido,
+      totalMeta,
     },
     ranking,   // ranking por vendedor, pronto para exibir
-    clientes: clientesTetra,
+  });
+});
+
+// ── Endpoint /api/detalhes (por pedido, para análise) ────────────────────────
+
+app.get('/api/detalhes', async (req, res) => {
+  const from    = req.query.from    || CAMPANHA_INICIO;
+  const to      = req.query.to      || CAMPANHA_FIM;
+  const company = (req.query.company || 'all').toLowerCase();
+
+  let dados;
+  try {
+    dados = await buscarVendas(from, to, company);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
+  const rowsCampanha = dados.rows.filter(r => isOutrasChaves(r.pro_tipo));
+
+  const pedidos = rowsCampanha
+    .map(r => ({
+      emp:        str(r.emp, 5),
+      pdv_numero: r.pdv_numero,
+      pdv_data:   r.pdv_data,
+      rep_nome:   str(r.rep_nome, 150),
+      cli_codigo: r.cli_codigo,
+      cli_nome:   str(r.cli_nome, 200),
+      pro_resumo: str(r.pro_resumo, 200),
+      subgrupo:   str(r.subgrupo, 100),
+      familia:    str(r.familia, 100),
+      qtde:       parseFloat(r.qtde)       || 0,
+      valortotal: parseFloat(r.valortotal) || 0,
+    }))
+    .sort((a, b) => new Date(b.pdv_data) - new Date(a.pdv_data));
+
+  res.json({
+    erros: dados.erros,
+    sincronizado_em: new Date().toISOString(),
+    vendedores: calcularRanking(dados.rows), // meta, vendido, pct por vendedora
+    pedidos,
   });
 });
 
@@ -446,16 +516,18 @@ app.get('/api/status', (_req, res) => res.json({ ok: true, time: new Date().toIS
 // ── Diagnóstico ───────────────────────────────────────────────────────────────
 
 app.get('/api/debug', async (req, res) => {
-  const from      = req.query.from || '2026-06-01';
-  const dateParam = new Date(`${from}T00:00:00`);
+  const from     = req.query.from || CAMPANHA_INICIO;
+  const to       = req.query.to   || CAMPANHA_FIM;
+  const dateFrom = new Date(`${from}T00:00:00`);
+  const dateTo   = new Date(`${to}T23:59:59`);
   const resultado = {};
 
   // Firebird MG
   if (fbConfigured(cfgMG)) {
     try {
-      const rows = await queryFirebird(cfgMG, SQL_FB_MG, [dateParam]);
+      const rows = await queryFirebird(cfgMG, SQL_FB_MG, [dateFrom, dateTo]);
       const clientes = [...new Set(rows.map(r => r.cli_codigo))];
-      resultado.firebird_mg = { linhas: rows.length, clientes: clientes.length, lista_clientes: rows.map(r => ({ cli_codigo: r.cli_codigo, cli_nome: r.cli_nome, subgrupo: r.subgrupo, qtde: r.qtde })) };
+      resultado.firebird_mg = { linhas: rows.length, clientes: clientes.length, lista_clientes: rows.map(r => ({ cli_codigo: r.cli_codigo, cli_nome: r.cli_nome, subgrupo: r.subgrupo, familia: r.familia, qtde: r.qtde })) };
     } catch (e) {
       resultado.firebird_mg = { erro: e.message };
     }
@@ -466,9 +538,9 @@ app.get('/api/debug', async (req, res) => {
   // Firebird SJC
   if (fbConfigured(cfgSJC)) {
     try {
-      const rows = await queryFirebird(cfgSJC, SQL_FB_SJC, [dateParam]);
+      const rows = await queryFirebird(cfgSJC, SQL_FB_SJC, [dateFrom, dateTo]);
       const clientes = [...new Set(rows.map(r => r.cli_codigo))];
-      resultado.firebird_sjc = { linhas: rows.length, clientes: clientes.length, lista_clientes: rows.map(r => ({ cli_codigo: r.cli_codigo, cli_nome: r.cli_nome, subgrupo: r.subgrupo, qtde: r.qtde })) };
+      resultado.firebird_sjc = { linhas: rows.length, clientes: clientes.length, lista_clientes: rows.map(r => ({ cli_codigo: r.cli_codigo, cli_nome: r.cli_nome, subgrupo: r.subgrupo, familia: r.familia, qtde: r.qtde })) };
     } catch (e) {
       resultado.firebird_sjc = { erro: e.message };
     }
@@ -481,14 +553,16 @@ app.get('/api/debug', async (req, res) => {
     try {
       const pool   = await getOwnPool();
       const result = await pool.request()
-        .input('dateFrom', sql.DateTime, dateParam)
+        .input('dateFrom', sql.DateTime, dateFrom)
+        .input('dateTo',   sql.DateTime, dateTo)
         .query(`
           SELECT emp, cli_codigo, cli_nome,
                  COUNT(*)   AS linhas,
                  SUM(qtde)  AS qtde_total,
-                 MAX(subgrupo) AS ultimo_subgrupo
+                 MAX(subgrupo) AS ultimo_subgrupo,
+                 MAX(familia)  AS ultima_familia
           FROM [TI-DIRETORIA_VendasTetra]
-          WHERE pdv_data >= @dateFrom
+          WHERE pdv_data >= @dateFrom AND pdv_data <= @dateTo
           GROUP BY emp, cli_codigo, cli_nome
           ORDER BY emp, cli_nome
         `);
@@ -508,7 +582,7 @@ app.get('/api/debug', async (req, res) => {
 (async () => {
   await ensureTable();
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n✓ Painel Tetra rodando em http://0.0.0.0:${PORT}`);
+    console.log(`\n✓ Painel Outras Chaves rodando em http://0.0.0.0:${PORT}`);
     console.log(`  Acesso local:  http://localhost:${PORT}\n`);
   });
 })();
