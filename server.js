@@ -110,6 +110,8 @@ const SQL_FB_MG = `
   AND   p.pdv_tve_codigo   NOT IN ('7','6','26','34')
   AND   r.rep_rvs_codigo       IN ('1','16')
   AND   r.rep_nome         NOT LIKE '%IVANILDO%'
+  AND   r.rep_nome         NOT LIKE '%JUCELIA%'
+  AND   r.rep_nome         NOT LIKE '%VICTOR HUGO%'
   AND   pro.pro_nivel2 = 1
   AND   pro.pro_nivel3 NOT IN ('1')
   GROUP BY r.rep_nome, pvi.pvi_pro_codigo, pro.pro_resumo,
